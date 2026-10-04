@@ -108,9 +108,11 @@
       const folders=await driveFind("name = 'My Document Vault' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
       const folder=folders[0]||await createDriveFile('My Document Vault','application/vnd.google-apps.folder');driveFolderId=folder.id;
       await ensurePublicViewer(driveFolderId);
-      const indexes=await driveFind(`'${driveFolderId}' in parents and name = 'vault-index.json' and trashed = false`);
-      if(indexes.length){indexFileId=indexes[0].id;const response=await driveFetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(indexFileId)}?alt=media`);const saved=await response.json();if(Array.isArray(saved))docs=saved.map(d=>({...d,localUrl:undefined}))}
-      else{const index=await createDriveFile('vault-index.json','application/json',[driveFolderId]);indexFileId=index.id;await saveDriveIndex()}
+      const legacyIndexes=await driveFind(`'${driveFolderId}' in parents and name = 'vault-index.json' and trashed = false`);
+      const rootIndexes=legacyIndexes.length?[]:await driveFind(`'root' in parents and name = 'vault-index.json' and trashed = false`);
+      const indexes=legacyIndexes.length?legacyIndexes:rootIndexes;
+      if(indexes.length){indexFileId=indexes[0].id;const response=await driveFetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(indexFileId)}?alt=media`);const saved=await response.json();if(Array.isArray(saved))docs=saved.map(d=>({...d,localUrl:undefined}));if(legacyIndexes.length){await driveFetch(`${DRIVE_API}/${encodeURIComponent(indexFileId)}?addParents=root&removeParents=${encodeURIComponent(driveFolderId)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:'{}'})}}
+      else{const index=await createDriveFile('vault-index.json','application/json');indexFileId=index.id;await saveDriveIndex()}
       localStorage.setItem(STORAGE,JSON.stringify(cleanDocs()));
       document.body.classList.add('owner-mode');document.body.classList.remove('public-mode');$('#publicAccess').hidden=true;$('#driveStatus .privacy-text').textContent='Owner account connected · Public viewer enabled';$('#driveStatus .dot').style.background='#38a276';$('#connectDrive').textContent='Reconnect Drive';$('#copyPublicLink').hidden=false;render();toast('Drive synced; anyone with the viewer link can read this folder');
     }catch(err){console.error(err);driveToken='';document.body.classList.remove('owner-mode');$('#driveStatus .privacy-text').textContent='Drive connection failed';$('#driveStatus .dot').style.background='#d45d52';toast('Could not connect to Drive. Check setup and try again.')}
